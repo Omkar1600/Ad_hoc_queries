@@ -6,3 +6,84 @@ where customer =  "Atliq Exclusive" and region = "APAC"
 
 Query 2
 
+select F.Unique_product_of_2020 , F.Unique_product_of_2021 ,
+((F.Unique_product_of_2021 -F.Unique_product_of_2020)/F.Unique_product_of_2020*100) as Percentage_Change from 
+(select C.Unique_product_of_2020,(B.a-A.b) as "Unique_product_of_2021"from 
+(select count(*) as "b" from 
+(SELECT product_code FROM gdb023.fact_manufacturing_cost where cost_year="2021") o,
+(SELECT product_code FROM gdb023.fact_manufacturing_cost where cost_year="2020") t
+where o.product_code=t.product_code) A,
+(SELECT count(product_code) as "a" FROM gdb023.fact_manufacturing_cost where cost_year="2021") B,
+(SELECT count(product_code) as "Unique_product_of_2020" FROM gdb023.fact_manufacturing_cost where cost_year="2020") C) as F 
+
+Query 3
+
+SELECT segment , count(product_code) as product_code
+FROM gdb023.dim_product
+group by segment
+order by 2 desc;
+
+
+Query 4
+
+select distinct f.segment , f.year as "product_count_2021",s.year as "product_count_2020" , (f.year-s.year) as difference from
+(SELECT n.segment,count(y.cost_year) as year
+FROM gdb023.fact_manufacturing_cost as y join gdb023.dim_product as n on y.product_code = n.product_code
+where y.cost_year = "2021"
+group by n.segment) f,
+(SELECT n.segment,count(y.cost_year) as year
+FROM gdb023.fact_manufacturing_cost as y join gdb023.dim_product as n on y.product_code = n.product_code
+where y.cost_year = "2020"
+group by n.segment) s
+where f.segment =s.segment;
+
+
+Query 5
+
+(SELECT distinct p.product_code , p.product,c.manufacturing_cost
+ FROM gdb023.dim_product p,gdb023.fact_manufacturing_cost c 
+ where p.product_code = c.product_code order by 3 limit 1)
+union all 
+(SELECT distinct p.product_code , p.product,c.manufacturing_cost 
+FROM gdb023.dim_product p,gdb023.fact_manufacturing_cost c 
+where p.product_code = c.product_code order by 3 desc limit 1);
+
+Query 6
+
+SELECT i.customer_code,i.customer , j.pre_invoice_discount_pct 
+FROM gdb023.dim_customer i, gdb023.fact_pre_invoice_deductions j
+where i.customer_code = j.customer_code and i.market = "India"
+order by 3 Desc limit 5;
+
+Query 7
+
+SELECT Month(Q.date) as "Month", year(Q.date) as "Year" , round(sum((Q.sold_quantity * P.gross_price)),0) as sales
+FROM gdb023.fact_sales_monthly Q , gdb023.fact_gross_price P ,gdb023.dim_customer C 
+where Q.product_code = P.product_code and Q.customer_code = C.customer_code and C.customer = "Atliq Exclusive"
+group by Month(Q.date) , Year(Q.date) order by 2;
+
+Query 8
+
+SELECT quarter(date) as Quater,sum(sold_quantity) as total_sold_quantity
+FROM gdb023.fact_sales_monthly
+where fiscal_year = "2020"
+group by quarter(date) order by 1; 
+
+Query 9
+
+select F.channel,F.sales,((F.sales/F.Total)*100) as percentage from 
+(select T.sales,T.channel ,sum(T.sales) Over () as Total from 
+(SELECT round(sum((Q.sold_quantity * P.gross_price)),0) as sales, C.channel
+FROM gdb023.fact_sales_monthly Q , gdb023.fact_gross_price P ,gdb023.dim_customer C 
+where Q.product_code = P.product_code and Q.customer_code = C.customer_code and Q.fiscal_year="2021"
+group by C.channel) as T) as F
+
+Query 10
+
+select * from 
+(select T.*, rank() over(partition by T.division order by T.Quantity desc) as "Rank"
+from (SELECT sum(s.sold_quantity)as Quantity , P.product_code , P.product , P.division 
+FROM gdb023.fact_sales_monthly as S ,gdb023.dim_product as P 
+where P.product_code = S.product_code and S.fiscal_year ="2021"
+group by  P.product_code , P.product , P.division) as T) as F
+where F.Rank<=3
